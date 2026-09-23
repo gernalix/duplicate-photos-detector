@@ -106,6 +106,14 @@ For the strongest results this writes:
 
 This is intended for manual validation of borderline matches.
 
+### Group every strong occurrence
+
+```bash
+grindr-photo group ~/Downloads/photo.jpg
+```
+
+`group` broadens the hash/crop scan across the whole index, applies geometric verification to plausible candidates, and prints every strong `EXACT`, `SAME_IMAGE` or `SCREEN_CAPTURE` occurrence it finds, together with the occurrence count, earliest appearance and timeline. This is the command to use when the main question is “when have I already seen this underlying photo?”
+
 ### Ask only for nearest visual candidates
 
 ```bash
