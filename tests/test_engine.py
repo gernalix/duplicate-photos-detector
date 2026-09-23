@@ -91,3 +91,21 @@ def test_index_and_search_exact(tmp_path: Path):
     assert results
     assert results[0].classification == "EXACT"
     assert Path(results[0].path) == original.resolve()
+
+
+def test_exhaustive_group_returns_all_exact_occurrences(tmp_path: Path):
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    seed = tmp_path / "seed.jpg"
+    make_feature_rich(seed)
+    for index in range(3):
+        (archive / f"copy-{index}.jpg").write_bytes(seed.read_bytes())
+
+    engine = DuplicatePhotoEngine(tmp_path / "index.sqlite3")
+    stats = engine.index_archive(archive)
+    assert stats.indexed == 3
+
+    results = engine.search(seed, top=1, exhaustive=True)
+    strong = engine.strong_matches(results)
+    assert len(strong) == 3
+    assert all(result.classification == "EXACT" for result in strong)
