@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "duplicate-photos-detector"
+version = "0.1.0"
+description = "Local reverse-image matcher for exact, transformed, cropped and screen-photographed duplicates"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "Pillow>=10.4",
+  "ImageHash>=4.3.2",
+  "numpy>=1.26",
+  "opencv-python-headless>=4.10",
+  "typer>=0.12",
+  "rich>=13.7",
+]
+
+[project.optional-dependencies]
+embed = ["open_clip_torch>=2.29", "torch>=2.4"]
+faiss = ["faiss-cpu>=1.8"]
+dev = ["pytest>=8.2"]
+
+[project.scripts]
+grindr-photo = "duplicate_photos_detector.cli:app"
+duplicate-photo = "duplicate_photos_detector.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
