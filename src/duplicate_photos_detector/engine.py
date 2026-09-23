@@ -234,6 +234,7 @@ class DuplicatePhotoEngine:
         *,
         top: int = 10,
         embeddings: bool = False,
+        exhaustive: bool = False,
     ) -> list[MatchResult]:
         query_path = Path(query_path).expanduser().resolve()
         if not query_path.is_file():
@@ -262,7 +263,11 @@ class DuplicatePhotoEngine:
             key=lambda image_id: phash_distances[image_id],
         )
         candidate_ids = (
-            set(hash_order[: self.thresholds.hash_candidates])
+            set(
+                hash_order
+                if exhaustive
+                else hash_order[: self.thresholds.hash_candidates]
+            )
             | exact_ids
         )
 
@@ -284,7 +289,7 @@ class DuplicatePhotoEngine:
             for image_id, score in nearest_embeddings(
                 query_vector,
                 embedding_rows,
-                max(top * 5, 50),
+                len(embedding_rows) if exhaustive else max(top * 5, 50),
             ):
                 embedding_scores[image_id] = score
                 candidate_ids.add(image_id)
@@ -314,10 +319,28 @@ class DuplicatePhotoEngine:
             )
 
         prelim.sort(key=lambda item: (item[1], item[2], item[3]))
-        geometry_ids = {
-            item[0]
-            for item in prelim[: self.thresholds.geometry_candidates]
-        } | exact_ids
+        if exhaustive:
+            plausible_geometry = {
+                item[0]
+                for item in prelim
+                if (
+                    item[1] <= max(self.thresholds.phash_same * 2, 16)
+                    or -item[2] >= self.thresholds.crop_region_cutoff
+                )
+            }
+            geometry_ids = (
+                plausible_geometry
+                | {
+                    item[0]
+                    for item in prelim[: self.thresholds.geometry_candidates]
+                }
+                | exact_ids
+            )
+        else:
+            geometry_ids = {
+                item[0]
+                for item in prelim[: self.thresholds.geometry_candidates]
+            } | exact_ids
 
         geometry: dict[int, GeometryStats] = {}
         for image_id in geometry_ids:
@@ -377,7 +400,16 @@ class DuplicatePhotoEngine:
                 result.first_seen_ts,
             )
         )
-        return results[:top]
+        return results if exhaustive else results[:top]
+
+    @staticmethod
+    def strong_matches(results: list[MatchResult]) -> list[MatchResult]:
+        accepted = {"EXACT", "SAME_IMAGE", "SCREEN_CAPTURE"}
+        return [
+            result
+            for result in results
+            if result.classification in accepted
+        ]
 
     @staticmethod
     def strong_timeline(results: list[MatchResult]) -> list[float]:
