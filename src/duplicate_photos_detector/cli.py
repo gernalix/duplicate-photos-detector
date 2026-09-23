@@ -157,6 +157,35 @@ def similar_command(
     _print_results(results)
 
 
+@app.command("group")
+def group_command(
+    query: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False)],
+    db: Annotated[Path, typer.Option("--db")] = DEFAULT_DB,
+    embeddings: Annotated[bool, typer.Option("--embeddings")] = False,
+):
+    """List all strong occurrences of the same underlying image."""
+    engine = DuplicatePhotoEngine(db)
+    results = engine.search(
+        query,
+        top=1,
+        embeddings=embeddings,
+        exhaustive=True,
+    )
+    strong = engine.strong_matches(results)
+    if not strong:
+        console.print("No strong same-image occurrence found.")
+        raise typer.Exit(1)
+
+    _print_results(strong)
+    console.print(f"\nOccurrences: {len(strong)}")
+    console.print(
+        f"First seen: {format_local_timestamp(min(r.first_seen_ts for r in strong))}"
+    )
+    console.print("Timeline:")
+    for ts in engine.strong_timeline(strong):
+        console.print(f"  {format_local_timestamp(ts)}")
+
+
 @app.command("watch")
 def watch_command(
     archive: Annotated[Path, typer.Argument(exists=True, file_okay=False)],
