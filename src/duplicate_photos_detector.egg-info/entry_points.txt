@@ -1,0 +1,3 @@
+[console_scripts]
+duplicate-photo = duplicate_photos_detector.cli:app
+grindr-photo = duplicate_photos_detector.cli:app
