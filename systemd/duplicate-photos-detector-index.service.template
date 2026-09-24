@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh duplicate-photos-detector archive index
+ConditionPathIsDirectory=__ARCHIVE_DIR__
+
+[Service]
+Type=oneshot
+ExecStart=__VENV__/bin/grindr-photo index __ARCHIVE_DIR__ --db __DB_PATH__ --prune
+NoNewPrivileges=true
+PrivateTmp=true
