@@ -128,17 +128,21 @@ grindr-photo similar ~/Downloads/query.jpg --top 10 --embeddings
 
 ### Keep the index updated
 
+For archives that change only occasionally, run incremental indexing periodically instead of keeping a polling process resident:
+
 ```bash
-grindr-photo watch ~/Pictures/GrindrPhotos
+grindr-photo index ~/Pictures/GrindrPhotos --prune
 ```
 
-`watch` performs cheap incremental scans at a configurable interval and indexes only new or changed files:
+The Fedora templates below run that command every 5 minutes. Unchanged images are skipped, while `--prune` removes index rows for files that were deleted or moved.
+
+The interactive `watch` command is still available when near-immediate updates are temporarily useful:
 
 ```bash
 grindr-photo watch ~/Pictures/GrindrPhotos --interval 10
 ```
 
-It is suitable for a Fedora user-level systemd service. The repository includes a service template; machine-specific installation/enabling should be done locally.
+`watch` recursively scans the archive on every interval, so it is not the recommended always-on mode for a mostly static archive. If another importer owns creation of archive files, invoking `grindr-photo index ... --prune` once after a successful import is even cheaper than periodic polling.
 
 ## First-seen timestamps
 
@@ -172,8 +176,20 @@ pytest
 
 The automated suite covers exact duplicates, re-encoding/resizing, crop-resistant hashing, database indexing and geometric verification on synthetic transformed images.
 
-## Fedora service
+## Fedora periodic indexing
 
-`systemd/duplicate-photos-detector-watch.service.template` is a template, not an enabled unit. Copy it into `~/.config/systemd/user/`, replace the placeholders with the local checkout/archive paths, then run `systemctl --user daemon-reload && systemctl --user enable --now ...`.
+The repository includes two user-systemd templates:
+
+- `systemd/duplicate-photos-detector-index.service.template`: one incremental indexing pass with pruning.
+- `systemd/duplicate-photos-detector-index.timer.template`: starts the service after login and then every 5 minutes.
+
+Copy both into `~/.config/systemd/user/` without the `.template` suffix, replace `__VENV__`, `__ARCHIVE_DIR__` and `__DB_PATH__`, then enable the timer:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now duplicate-photos-detector-index.timer
+```
+
+Do not enable a permanent `watch` service for the normal sporadic-update workload. Machine-specific paths and activation remain local to Fedora.
 
 For this project, the canonical roadmap contains the local-Fedora completion task so installation, model caching, real-photo calibration and service activation can be executed where the archive actually exists.
