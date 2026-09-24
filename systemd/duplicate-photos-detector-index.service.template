@@ -4,6 +4,6 @@ ConditionPathIsDirectory=__ARCHIVE_DIR__
 
 [Service]
 Type=oneshot
-ExecStart=__VENV__/bin/grindr-photo index __ARCHIVE_DIR__ --db __DB_PATH__ --prune
+ExecStart=/usr/bin/python3 -m duplicate_photos_detector.cli index __ARCHIVE_DIR__ --db __DB_PATH__ --prune
 NoNewPrivileges=true
 PrivateTmp=true

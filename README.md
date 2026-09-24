@@ -34,21 +34,19 @@ Python 3.11+ is recommended.
 ```bash
 git clone https://github.com/gernalix/duplicate-photos-detector.git
 cd duplicate-photos-detector
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
+python3 -m pip install --user --break-system-packages .
 ```
 
 Optional embedding support:
 
 ```bash
-pip install -e '.[embed]'
+python3 -m pip install --user --break-system-packages '.[embed]'
 ```
 
 Optional FAISS acceleration:
 
 ```bash
-pip install -e '.[embed,faiss]'
+python3 -m pip install --user --break-system-packages '.[embed,faiss]'
 ```
 
 ## Commands
@@ -176,20 +174,21 @@ pytest
 
 The automated suite covers exact duplicates, re-encoding/resizing, crop-resistant hashing, database indexing and geometric verification on synthetic transformed images.
 
-## Fedora periodic indexing
+## Fedora indexing
 
-The repository includes two user-systemd templates:
+The repository includes user-systemd templates:
 
 - `systemd/duplicate-photos-detector-index.service.template`: one incremental indexing pass with pruning.
 - `systemd/duplicate-photos-detector-index.timer.template`: starts the service after login and then every 5 minutes.
+- `systemd/duplicate-photos-detector-watch.service.template`: always-on archive watcher with systemd restart.
 
-Copy both into `~/.config/systemd/user/` without the `.template` suffix, replace `__VENV__`, `__ARCHIVE_DIR__` and `__DB_PATH__`, then enable the timer:
+Copy the chosen unit or timer pair into `~/.config/systemd/user/` without the `.template` suffix and replace `__ARCHIVE_DIR__` and `__DB_PATH__`. For the always-on watcher:
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable --now duplicate-photos-detector-index.timer
+systemctl --user enable --now duplicate-photos-detector-watch.service
 ```
 
-Do not enable a permanent `watch` service for the normal sporadic-update workload. Machine-specific paths and activation remain local to Fedora.
+Run either the watcher or the periodic timer for one archive, not both. Machine-specific paths and activation remain local to Fedora.
 
 For this project, the canonical roadmap contains the local-Fedora completion task so installation, model caching, real-photo calibration and service activation can be executed where the archive actually exists.

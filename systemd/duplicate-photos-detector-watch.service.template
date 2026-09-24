@@ -1,0 +1,16 @@
+[Unit]
+Description=Watch duplicate-photos-detector archive
+ConditionPathIsDirectory=__ARCHIVE_DIR__
+StartLimitIntervalSec=5min
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m duplicate_photos_detector.cli watch __ARCHIVE_DIR__ --db __DB_PATH__ --interval 10
+Restart=always
+RestartSec=10s
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
