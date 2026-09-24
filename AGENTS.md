@@ -9,4 +9,5 @@ Keep the project local-first and narrow.
 - Preserve the staged matcher: SHA-256 -> perceptual/crop hashes -> SIFT/RANSAC -> optional OpenCLIP.
 - Semantic embeddings are fallback evidence only.
 - Prefer targeted tests; do not add unrelated image-management features.
+- For a mostly static archive, prefer one-shot incremental indexing from a 5-minute user-systemd timer (or an importer post-success hook) over an always-on polling service.
 - If thresholds are tuned from real local photos, commit only aggregate threshold/test results, never private filenames or image contents.
