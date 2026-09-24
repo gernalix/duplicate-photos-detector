@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh duplicate-photos-detector archive index periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=duplicate-photos-detector-index.service
+
+[Install]
+WantedBy=timers.target
