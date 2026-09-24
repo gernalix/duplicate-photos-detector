@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+src/duplicate_photos_detector/__init__.py
+src/duplicate_photos_detector/cli.py
+src/duplicate_photos_detector/db.py
+src/duplicate_photos_detector/embeddings.py
+src/duplicate_photos_detector/engine.py
+src/duplicate_photos_detector/vision.py
+src/duplicate_photos_detector.egg-info/PKG-INFO
+src/duplicate_photos_detector.egg-info/SOURCES.txt
+src/duplicate_photos_detector.egg-info/dependency_links.txt
+src/duplicate_photos_detector.egg-info/entry_points.txt
+src/duplicate_photos_detector.egg-info/requires.txt
+src/duplicate_photos_detector.egg-info/top_level.txt
+tests/test_engine.py
