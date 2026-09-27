@@ -1,0 +1,113 @@
+schema_version: c2.project-capsule.v1
+identity:
+  project_id: 102
+  slug: duplicate-photos-detector
+  repository_id: R0103
+scope:
+  purpose: Find exact or transformed copies of the same underlying image in an owner-selected local photo archive.
+  boundaries:
+    - Does not perform face recognition or infer whether different photos depict the same person.
+    - Does not own, export, upload, or commit original photos, private indexes, embeddings, diagnostics, or cached model weights.
+    - User-specific archive paths and service activation stay in local configuration.
+repository:
+  canonical_workdir: /home/daniele/projects/duplicate-photos-detector
+  branch_policy: Canonical main is protected by the repository single writer; develop in the isolated C2 task worktree and integrate through its PR queue.
+architecture:
+  summary: A Typer CLI runs incremental indexing and image search through a SQLite PhotoIndex, staged hash and geometric matching, and optional local embeddings.
+  entrypoints:
+    - src/duplicate_photos_detector/cli.py
+    - src/duplicate_photos_detector/engine.py
+  important_paths:
+    - src
+    - tests
+    - pyproject.toml
+    - README.md
+    - AGENTS.md
+    - systemd
+    - .github
+dependencies:
+  - name: Pillow
+    purpose: Decode and transform images.
+  - name: ImageHash
+    purpose: Perceptual and crop-resistant hashes.
+  - name: numpy
+    purpose: Image and geometry arrays.
+  - name: opencv-python-headless
+    purpose: SIFT features, geometric verification, and image warping.
+  - name: typer
+    purpose: Command-line interface.
+  - name: rich
+    purpose: Terminal result formatting.
+  - name: open_clip_torch and torch (optional embed extra)
+    purpose: Optional local visual-similarity fallback; not proof of image identity.
+  - name: faiss-cpu (optional faiss extra)
+    purpose: Optional nearest-neighbor acceleration for embeddings.
+data:
+  schema: The local SQLite images table stores file paths, archive root, hashes, dimensions, size and timestamps, with optional embedding data; original image files remain in the owner-selected archive.
+  migrations: PhotoIndex creates its table and indexes idempotently at startup; there is no separate migration framework.
+runtime:
+  services:
+    - systemd/duplicate-photos-detector-index.service.template
+    - systemd/duplicate-photos-detector-watch.service.template
+  timers:
+    - systemd/duplicate-photos-detector-index.timer.template
+  containers: []
+devices: []
+commands:
+  setup:
+    argv: [python3, -m, pip, install, -e, ".[dev]"]
+    cwd: .
+  build:
+    argv: [python3, -m, pip, wheel, --no-deps, --no-build-isolation, --wheel-dir, /tmp/duplicate-photos-detector-wheel, .]
+    cwd: .
+  test_targeted:
+    argv: [python3, -m, pytest, -q, tests/test_engine.py]
+    cwd: .
+  test_full:
+    argv: [python3, -m, pytest, -q]
+    cwd: .
+  lint:
+    not_applicable: No linter or lint configuration is defined in pyproject.toml.
+  deploy_install:
+    not_applicable: Unit templates require owner-specific archive/database paths and manual local systemd activation.
+  smoke:
+    not_applicable: A live smoke test would access or mutate the owner's private archive; synthetic tests are the safe smoke check.
+  verify:
+    fast:
+      argv: [python3, /home/daniele/projects/codex-roadmap/tools/project_capsule.py, --repo, ., --mode, FAST]
+      cwd: .
+    full:
+      argv: [python3, /home/daniele/projects/codex-roadmap/tools/project_capsule.py, --repo, ., --mode, FULL]
+      cwd: .
+safety:
+  invariants:
+    - Match classification concerns the same underlying image, never identity of people.
+    - Original photos and local index data stay local and out of Git.
+    - Semantic embeddings are fallback similarity evidence and never proof of same-image identity.
+  risky_operations:
+    - Indexing writes the local SQLite index; run it only against an explicitly selected archive and database.
+    - The --prune option removes index rows for files absent from the selected archive; review the archive and database paths first.
+    - The watch service continuously scans and writes the index; use the one-shot timer template for normal periodic refresh and do not activate a live service during source validation.
+    - Optional OpenCLIP setup may download model weights; keep cached weights local and do not commit them.
+  recovery:
+    - Original photos remain the source of truth; the index can be rebuilt, but any local index backup/rebuild decision is owner-managed and absent from repository deployment commands.
+acceptance:
+  - FAST validates capsule schema, MegaVault identity, paths, commands, freshness, and changed-file mapping.
+  - FULL passes FAST and runs the safe synthetic pytest suite without reading or changing a private photo archive.
+  - The capsule describes only the canonical source repository and leaves runtime paths and private data local.
+references:
+  megavault: /home/daniele/MegaVault/megavault.sqlite
+  c2: /home/daniele/projects/codex-roadmap/roadmap.sqlite
+freshness:
+  reviewed_commit: 4a185ade85333282616f9731806b94b8134c6fc0
+  watch_paths: [src, tests, pyproject.toml, systemd, .github]
+artifacts:
+  agents: AGENTS.md
+validation_hooks:
+  - id: synthetic-pytest
+    argv: [python3, -m, pytest, -q]
+    cwd: .
+    safe: true
+change_verification:
+  - paths: [project-capsule.yaml]
+    commands: [test_full]
