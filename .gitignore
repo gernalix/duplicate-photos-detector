@@ -9,3 +9,4 @@ htmlcov/
 *.db
 diagnostics/
 .DS_Store
+build/
