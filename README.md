@@ -191,4 +191,4 @@ systemctl --user enable --now duplicate-photos-detector-watch.service
 
 Run either the watcher or the periodic timer for one archive, not both. Machine-specific paths and activation remain local to Fedora.
 
-For this project, the canonical roadmap contains the local-Fedora completion task so installation, model caching, real-photo calibration and service activation can be executed where the archive actually exists.
+Installation, model caching, real-photo calibration and service activation require a separately authorized local-Fedora runtime task where the archive actually exists. Offline source validation neither performs those operations nor requires the retired C2/C3 roadmap.
