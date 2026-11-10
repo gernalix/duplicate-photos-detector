@@ -210,7 +210,7 @@ references:
   megavault: /home/daniele/MegaVault/megavault.sqlite
   c2: Historical-only reference; no dispatcher or lifecycle writes.
 freshness:
-  reviewed_commit: 70b3365699e538f76645b892e5555273ab2d2caf
+  reviewed_commit: 1ad3d492b837594b10b7391e0678e6dbdc18a30c
   watch_paths:
   - src
   - tests
