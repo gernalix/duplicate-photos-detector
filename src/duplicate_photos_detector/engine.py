@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .db import PhotoIndex
+from .filesystem import archive_image
 from .embeddings import OpenClipEmbedder, nearest_embeddings, vector_to_blob
 from .vision import (
     GeometryStats,
@@ -63,6 +64,9 @@ class MatchResult:
     crop_average_distance: float
     geometry: GeometryStats
     embedding_similarity: float | None = None
+    archive_root: str = ""
+    source_sha256: str = ""
+    query_sha256: str = ""
 
 
 class DuplicatePhotoEngine:
@@ -93,56 +97,54 @@ class DuplicatePhotoEngine:
             if not is_supported_image(path):
                 continue
             stats.scanned += 1
-            resolved = path.resolve()
-            existing_paths.append(str(resolved))
-
+            existing_paths.append(str(path))
             try:
-                st = resolved.stat()
-                previous = self.db.get_by_path(resolved)
-                embedding_is_ready = (
-                    not embeddings
-                    or (
-                        previous is not None
-                        and previous["embedding"] is not None
-                        and previous["embedding_model"] == embedder.model_key
+                with archive_image(root, path) as (opened, st):
+                    previous = self.db.get_by_path(path)
+                    embedding_is_ready = (
+                        not embeddings
+                        or (
+                            previous is not None
+                            and previous["embedding"] is not None
+                            and previous["embedding_model"] == embedder.model_key
+                        )
                     )
-                )
 
-                if (
-                    previous is not None
-                    and previous["size_bytes"] == st.st_size
-                    and previous["mtime_ns"] == st.st_mtime_ns
-                    and embedding_is_ready
-                ):
-                    stats.skipped += 1
-                    continue
+                    if (
+                        previous is not None
+                        and previous["size_bytes"] == st.st_size
+                        and previous["mtime_ns"] == st.st_mtime_ns
+                        and embedding_is_ready
+                    ):
+                        stats.skipped += 1
+                        continue
 
-                image = load_rgb(resolved)
-                phash, crop_hash = perceptual_hashes(image)
-                vector = embedder.encode(image) if embedder else None
+                    image = load_rgb(opened)
+                    phash, crop_hash = perceptual_hashes(image)
+                    vector = embedder.encode(image) if embedder else None
 
-                self.db.upsert(
-                    {
-                        "path": str(resolved),
-                        "archive_root": str(root),
-                        "sha256": sha256_file(resolved),
-                        "phash": phash,
-                        "crop_hash": crop_hash,
-                        "width": image.width,
-                        "height": image.height,
-                        "size_bytes": st.st_size,
-                        "mtime_ns": st.st_mtime_ns,
-                        "first_seen_ts": infer_first_seen(resolved, image),
-                        "indexed_ts": time.time(),
-                        "embedding": vector_to_blob(vector) if vector is not None else None,
-                        "embedding_dim": int(vector.shape[0]) if vector is not None else None,
-                        "embedding_model": embedder.model_key if embedder else None,
-                    }
-                )
-                stats.indexed += 1
+                    self.db.upsert(
+                        {
+                            "path": str(path),
+                            "archive_root": str(root),
+                            "sha256": sha256_file(opened),
+                            "phash": phash,
+                            "crop_hash": crop_hash,
+                            "width": image.width,
+                            "height": image.height,
+                            "size_bytes": st.st_size,
+                            "mtime_ns": st.st_mtime_ns,
+                            "first_seen_ts": infer_first_seen(opened, image),
+                            "indexed_ts": time.time(),
+                            "embedding": vector_to_blob(vector) if vector is not None else None,
+                            "embedding_dim": int(vector.shape[0]) if vector is not None else None,
+                            "embedding_model": embedder.model_key if embedder else None,
+                        }
+                    )
+                    stats.indexed += 1
             except Exception as exc:
                 stats.failed += 1
-                stats.failures.append(f"{resolved}: {exc}")
+                stats.failures.append(f"{path}: {exc}")
 
         if prune:
             stats.pruned = self.db.prune_root(root, existing_paths)
@@ -239,21 +241,32 @@ class DuplicatePhotoEngine:
         query_path = Path(query_path).expanduser().resolve()
         if not query_path.is_file():
             raise ValueError(f"Query image does not exist: {query_path}")
+        with archive_image(query_path.parent, query_path) as (opened, _):
+            return self._search_opened(opened, top=top, embeddings=embeddings, exhaustive=exhaustive)
 
+    def _search_opened(self, query_path: Path, *, top: int,
+                       embeddings: bool, exhaustive: bool) -> list[MatchResult]:
         query_image = load_rgb(query_path)
         query_sha = sha256_file(query_path)
         query_phash, query_crop = perceptual_hashes(query_image)
-        rows = self.db.all_rows()
+        rows = []
+        exact_ids = set()
+        for row in self.db.all_rows():
+            try:
+                with archive_image(Path(row["archive_root"]), Path(row["path"])) as (opened, info):
+                    if (info.st_size, info.st_mtime_ns) != (row["size_bytes"], row["mtime_ns"]):
+                        continue
+                    if row["sha256"] == query_sha:
+                        if sha256_file(opened) != query_sha:
+                            continue
+                        exact_ids.add(int(row["id"]))
+                    rows.append(row)
+            except (OSError, ValueError):
+                continue
         if not rows:
             return []
 
         by_id = {int(row["id"]): row for row in rows}
-        exact_ids = {
-            int(row["id"])
-            for row in rows
-            if row["sha256"] == query_sha
-        }
-
         phash_distances = {
             int(row["id"]): phash_distance(query_phash, row["phash"])
             for row in rows
@@ -344,10 +357,16 @@ class DuplicatePhotoEngine:
 
         geometry: dict[int, GeometryStats] = {}
         for image_id in geometry_ids:
-            geometry[image_id] = geometric_match(
-                query_path,
-                by_id[image_id]["path"],
-            )
+            row = by_id[image_id]
+            try:
+                with archive_image(Path(row["archive_root"]), Path(row["path"])) as (opened, info):
+                    if ((info.st_size, info.st_mtime_ns) != (row["size_bytes"], row["mtime_ns"])
+                            or sha256_file(opened) != row["sha256"]):
+                        candidate_ids.discard(image_id)
+                        continue
+                    geometry[image_id] = geometric_match(query_path, opened)
+            except (OSError, ValueError):
+                candidate_ids.discard(image_id)
 
         results: list[MatchResult] = []
         for image_id in candidate_ids:
@@ -382,6 +401,9 @@ class DuplicatePhotoEngine:
                     crop_average_distance=crop_avg,
                     geometry=geom,
                     embedding_similarity=emb,
+                    archive_root=row["archive_root"],
+                    source_sha256=row["sha256"],
+                    query_sha256=query_sha,
                 )
             )
 

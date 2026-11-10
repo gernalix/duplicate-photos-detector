@@ -66,6 +66,15 @@ The default database is:
 ```
 
 Indexing is incremental. Unchanged files are skipped.
+Archive indexing and matching read regular files below the recorded archive
+root. Symbolic links are skipped, and legacy index rows outside their root
+are ignored. Reindex changed files before searching them again. An exact
+match also checks the current bytes against the query digest.
+
+The SQLite database and its sidecars use owner-only permissions. Custom
+database and diagnostics directories must be owned by the caller and
+protected against writes by other users. Image decoding accepts up to
+64 mebipixels per image.
 
 To calculate OpenCLIP embeddings while indexing:
 
@@ -101,6 +110,8 @@ For the strongest results this writes:
 
 - a side-by-side query/archive comparison;
 - a SIFT feature-match image showing geometrically verified correspondences.
+
+Diagnostic files are published atomically with owner-only permissions.
 
 This is intended for manual validation of borderline matches.
 

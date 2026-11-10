@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import cv2
@@ -11,6 +12,7 @@ from duplicate_photos_detector.vision import (
     load_rgb,
     perceptual_hashes,
     phash_distance,
+    render_side_by_side,
     sha256_file,
 )
 
@@ -91,6 +93,60 @@ def test_index_and_search_exact(tmp_path: Path):
     assert results
     assert results[0].classification == "EXACT"
     assert Path(results[0].path) == original.resolve()
+
+
+def test_archive_excludes_links_and_outside_legacy_rows(tmp_path: Path):
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    original = archive / "original.jpg"
+    outside = tmp_path / "outside.jpg"
+    make_feature_rich(original)
+    outside.write_bytes(original.read_bytes())
+    (archive / "linked.jpg").symlink_to(outside)
+    engine = DuplicatePhotoEngine(tmp_path / "index.sqlite3")
+    assert engine.index_archive(archive).indexed == 1
+    legacy = dict(engine.db.all_rows()[0])
+    legacy.update(path=str(outside), size_bytes=outside.stat().st_size,
+                  mtime_ns=outside.stat().st_mtime_ns)
+    engine.db.upsert(legacy)
+    results = engine.search(outside, exhaustive=True)
+    assert [Path(row.path) for row in results] == [original]
+    assert len(engine.db.all_rows()) == 2
+
+
+def test_exact_match_is_checked_against_current_bytes(tmp_path: Path):
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    original = archive / "original.bmp"
+    query = tmp_path / "query.bmp"
+    Image.new("RGB", (32, 32), "red").save(original)
+    query.write_bytes(original.read_bytes())
+    engine = DuplicatePhotoEngine(tmp_path / "index.sqlite3")
+    assert engine.index_archive(archive).indexed == 1
+    original_stat = original.stat()
+    Image.new("RGB", (32, 32), "blue").save(original)
+    assert original.stat().st_size == original_stat.st_size
+    os.utime(original, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+    assert not engine.search(query)
+
+
+def test_private_index_and_diagnostics(tmp_path: Path):
+    index = tmp_path / "index" / "photos.sqlite3"
+    DuplicatePhotoEngine(index)
+    assert index.parent.stat().st_mode & 0o777 == 0o700
+    assert index.stat().st_mode & 0o777 == 0o600
+    image = tmp_path / "fixture.jpg"
+    make_feature_rich(image)
+    diagnostics = tmp_path / "diagnostics"
+    diagnostics.mkdir(mode=0o700)
+    output = diagnostics / "comparison.jpg"
+    retained = tmp_path / "retained.txt"
+    retained.write_text("retained")
+    output.symlink_to(retained)
+    render_side_by_side(image, image, output)
+    assert retained.read_text() == "retained"
+    assert not output.is_symlink()
+    assert output.stat().st_mode & 0o777 == 0o600
 
 
 def test_exhaustive_group_returns_all_exact_occurrences(tmp_path: Path):

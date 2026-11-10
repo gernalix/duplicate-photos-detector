@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import math
+import stat
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 
 import cv2
 import imagehash
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
+
+from .filesystem import write_private_file
 
 SUPPORTED_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif"
@@ -29,11 +33,22 @@ class GeometryStats:
 
 
 def is_supported_image(path: Path) -> bool:
-    return path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
+    if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        return False
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except OSError:
+        return False
+
+
+def _check_pixel_budget(image: Image.Image) -> None:
+    if image.width * image.height > 64 * 1024 * 1024:
+        raise ValueError("image exceeds the local decode pixel budget")
 
 
 def load_rgb(path: Path | str) -> Image.Image:
     with Image.open(path) as im:
+        _check_pixel_budget(im)
         return ImageOps.exif_transpose(im).convert("RGB")
 
 
@@ -118,18 +133,14 @@ def format_local_timestamp(ts: float) -> str:
 
 
 def _read_gray(path: Path | str, max_dim: int = 1600) -> np.ndarray | None:
-    image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
-    if image is None:
+    try:
+        with Image.open(path) as image:
+            _check_pixel_budget(image)
+            grayscale = ImageOps.exif_transpose(image).convert("L")
+            grayscale.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+            return np.array(grayscale)
+    except (OSError, ValueError, Image.DecompressionBombError):
         return None
-    h, w = image.shape[:2]
-    scale = min(1.0, max_dim / max(h, w))
-    if scale < 1.0:
-        image = cv2.resize(
-            image,
-            (max(1, round(w * scale)), max(1, round(h * scale))),
-            interpolation=cv2.INTER_AREA,
-        )
-    return image
 
 
 def _feature_match_data(query_path: Path | str, candidate_path: Path | str):
@@ -213,8 +224,9 @@ def render_side_by_side(
     draw.text((margin, 10), f"QUERY    {label}", fill="black")
     draw.text((q.width + margin * 2, 10), "ARCHIVE MATCH", fill="black")
     output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(output, quality=92)
+    with BytesIO() as encoded:
+        canvas.save(encoded, format=Image.registered_extensions()[output.suffix.lower()], quality=92)
+        write_private_file(output, encoded.getvalue())
 
 
 def render_feature_diagnostic(
@@ -243,5 +255,7 @@ def render_feature_diagnostic(
         flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
     )
     output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    return bool(cv2.imwrite(str(output), drawn))
+    ok, encoded = cv2.imencode(output.suffix, drawn)
+    if ok:
+        write_private_file(output, encoded.tobytes())
+    return bool(ok)
