@@ -10,10 +10,12 @@ from rich.console import Console
 from rich.table import Table
 
 from .engine import DEFAULT_DB, DuplicatePhotoEngine, MatchThresholds
+from .filesystem import archive_image
 from .vision import (
     format_local_timestamp,
     render_feature_diagnostic,
     render_side_by_side,
+    sha256_file,
 )
 
 app = typer.Typer(
@@ -117,23 +119,24 @@ def find_command(
         console.print("\nNo strong same-image match found.")
 
     if diagnostics is not None:
-        diagnostics.mkdir(parents=True, exist_ok=True)
         written = 0
         for rank, result in enumerate(results[:3], 1):
             if result.classification == "NO_MATCH":
                 continue
             prefix = diagnostics / f"rank-{rank:02d}"
-            render_side_by_side(
-                query,
-                result.path,
-                prefix.with_name(prefix.name + "-comparison.jpg"),
-                label=f"{result.classification} {result.confidence}",
-            )
-            render_feature_diagnostic(
-                query,
-                result.path,
-                prefix.with_name(prefix.name + "-features.jpg"),
-            )
+            query_path = query.expanduser().resolve()
+            with archive_image(Path(result.archive_root), Path(result.path)) as (opened, _), \
+                    archive_image(query_path.parent, query_path) as (opened_query, _):
+                if (sha256_file(opened) != result.source_sha256
+                        or sha256_file(opened_query) != result.query_sha256):
+                    continue
+                render_side_by_side(
+                    opened_query, opened, prefix.with_name(prefix.name + "-comparison.jpg"),
+                    label=f"{result.classification} {result.confidence}",
+                )
+                render_feature_diagnostic(
+                    opened_query, opened, prefix.with_name(prefix.name + "-features.jpg"),
+                )
             written += 1
         console.print(f"Diagnostics written for {written} result(s): {diagnostics}")
 

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import os
 import sqlite3
+import stat
 from pathlib import Path
 from typing import Iterable
+
+from .filesystem import private_directory
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -34,13 +38,29 @@ CREATE INDEX IF NOT EXISTS idx_images_first_seen ON images(first_seen_ts);
 
 class PhotoIndex:
     def __init__(self, path: Path | str):
-        self.path = Path(path).expanduser()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = Path(path).expanduser().absolute()
         with self.connect() as conn:
             conn.executescript(SCHEMA)
 
     def connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=30)
+        with private_directory(self.path.parent) as parent:
+            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+            for suffix in ("", "-wal", "-shm", "-journal"):
+                try:
+                    fd = os.open(self.path.name + suffix, flags | (os.O_CREAT if not suffix else 0),
+                                 0o600, dir_fd=parent)
+                except FileNotFoundError:
+                    if not suffix:
+                        raise
+                    continue
+                try:
+                    info = os.fstat(fd)
+                    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid() or info.st_nlink != 1:
+                        raise PermissionError("index and sidecars must be private regular files")
+                    os.fchmod(fd, 0o600)
+                finally:
+                    os.close(fd)
+            conn = sqlite3.connect(self.path, timeout=30)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -48,7 +68,7 @@ class PhotoIndex:
         with self.connect() as conn:
             return conn.execute(
                 "SELECT * FROM images WHERE path = ?",
-                (str(Path(path).resolve()),),
+                (str(Path(path).absolute()),),
             ).fetchone()
 
     def exact(self, sha256: str):
