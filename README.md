@@ -51,6 +51,11 @@ python3 -m pip install --user --break-system-packages '.[embed,faiss]'
 
 ## Commands
 
+On the managed Fedora host, both command names use the flat package target
+updated by FEU. The embedding path uses the official CPU wheels for Torch
+and Torchvision, OpenCLIP, Faiss and a local copy of the documented model.
+The launcher holds the dependency lock throughout the command.
+
 The package installs both `grindr-photo` and the generic alias `duplicate-photo`.
 
 ### Index an archive

@@ -63,25 +63,18 @@ runtime:
 devices: []
 commands:
   setup:
-    argv:
-    - python3
-    - -m
-    - pip
-    - install
-    - -e
-    - .[dev]
-    cwd: .
+    not_applicable: FEU provisions the project's flat package target.
   build:
     argv:
-    - python3
-    - -m
-    - pip
-    - wheel
-    - --no-deps
-    - --no-build-isolation
-    - --wheel-dir
-    - /tmp/duplicate-photos-detector-wheel
+    - /usr/bin/python3
+    - -I
+    - -B
+    - /home/daniele/projects/fedora-external-updater/updater/library_build.py
+    - build
+    - --backend
+    - setuptools.build_meta
     - .
+    - /tmp/duplicate-photos-detector-wheel
     cwd: .
   test_targeted:
     argv:
@@ -120,8 +113,8 @@ commands:
     - .
     - /tmp/work
     - --ro-bind
-    - /home/daniele/.local/lib/python3.14/site-packages
-    - /home/daniele/.local/lib/python3.14/site-packages
+    - /home/daniele/.local/share/duplicate-photos-detector/packages
+    - /tmp/packages
     - --chdir
     - /tmp/work
     - --clearenv
@@ -133,7 +126,7 @@ commands:
     - /tmp
     - --setenv
     - PYTHONPATH
-    - /tmp/work/src:/usr/lib64/python3.15/site-packages:/usr/lib/python3.15/site-packages:/home/daniele/.local/lib/python3.14/site-packages
+    - /tmp/work/src:/tmp/packages
     - --setenv
     - PYTHONDONTWRITEBYTECODE
     - '1'
@@ -141,6 +134,8 @@ commands:
     - PYTEST_DISABLE_PLUGIN_AUTOLOAD
     - '1'
     - /usr/bin/python3
+    - -S
+    - -P
     - -B
     - -m
     - pytest
@@ -150,7 +145,8 @@ commands:
     - tests
     cwd: .
   lint:
-    not_applicable: No linter or lint configuration is defined in pyproject.toml.
+    argv: [git, diff, --check]
+    cwd: .
   deploy_install:
     not_applicable: Unit templates require owner-specific archive/database paths and
       manual local systemd activation.
@@ -231,6 +227,7 @@ change_verification:
 - paths:
   - src/*
   - tests/*
+  - tools/*
   - pyproject.toml
   - systemd/*
   - .github/*

@@ -23,7 +23,7 @@ class OpenClipEmbedder:
             import torch
         except ImportError as exc:
             raise RuntimeError(
-                "Embedding support is not installed. Run: pip install -e '.[embed]'"
+                "Embedding support is missing. Use the FEU-managed packages on Fedora or install the embed extra."
             ) from exc
 
         self.config = config or EmbeddingConfig()

@@ -1,0 +1,9 @@
+#!/usr/bin/bash
+set -euo pipefail
+runtime="$HOME/.local/share/duplicate-photos-detector"
+source="$HOME/projects/duplicate-photos-detector/src"
+unset PYTHONHOME VIRTUAL_ENV
+export PYTHONPATH="$source:$runtime/packages"
+export HF_HOME="$runtime/model-cache" HF_HUB_CACHE="$runtime/model-cache/hub" HF_HUB_OFFLINE=1
+exec /usr/bin/flock --shared --nonblock --conflict-exit-code 75 --no-fork "$runtime/.dependency-update.lock" \
+    /usr/bin/python3 -S -P -B -m duplicate_photos_detector.cli "$@"

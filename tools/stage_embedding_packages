@@ -1,0 +1,3 @@
+#!/usr/bin/bash
+set -euo pipefail
+exec /usr/bin/python3 -I -B "${BASH_SOURCE[0]%/*}/stage_embedding_packages.py" stage "$@"
